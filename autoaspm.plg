@@ -1,0 +1,386 @@
+<?xml version='1.0' standalone='yes'?>
+
+<!DOCTYPE PLUGIN [
+<!ENTITY name       "autoaspm">
+<!ENTITY author     "Maximilian Wiedemann">
+<!ENTITY version    "2024.07.09">
+<!ENTITY pluginURL  "https://raw.github.com/MaximilianWiedemann/unraid-plugin-autoaspm/main/&name;.plg">
+]>
+
+<PLUGIN  name="&name;"
+         author="&author;"
+         version="&version;"
+         pluginURL="&pluginURL;">
+
+<!--
+Copyright 2024, Maximilian Wiedemann
+
+The plugin installs autoaspm, a script monitoring network traffic speed to automatically enable/disable PCIe ASPM
+
+Plugin file locations:
+ /boot/plugins/autoaspm.plg                                             # this file
+
+ /boot/config/plugins/autoaspm/autoaspm.cfg                             # non-volatile configuration
+
+ /usr/local/emhttp/plugins/autoaspm/scripts/rc.autoaspm                 # plugin control script
+ /usr/local/emhttp/plugins/autoaspm/scripts/autoaspm.sh                 # main script
+
+ /usr/local/emhttp/plugins/autoaspm/autoaspm.page                       # page file for webGui menu system
+ /usr/local/emhttp/plugins/autoaspm/autoaspm_ctl.php                    # webGui back-end control 
+ /usr/local/emhttp/plugins/autoaspm/autoaspm.png                        # plugin icon file
+
+ /var/run/autoaspm/autoaspm.pid                                         # run-time pid file 
+-->
+
+<FILE Name="/boot/config/plugins/&name;/&name;.cfg">
+<INLINE>
+ENABLED=false
+NETWORK_INTERFACE=eth0
+HIGH_TRAFFIC_THRESHOLD=100000000
+CHECK_INTERVAL=5
+HIGH_TRAFFIC_ASPM_POLICY=performance
+LOW_TRAFFIC_ASPM_POLICY=powersave
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash" Method="install">
+<INLINE>
+if [ -d /usr/local/emhttp/plugins/&name; ]; then
+  rm -rf /usr/local/emhttp/plugins/&name;
+fi;
+
+# create writable directory for pid file
+if [ ! -e /var/run/&name; ]; then
+  mkdir -m 0777 /var/run/&name;
+  chown nobody:users /var/run/&name;
+fi
+
+# create application directories
+mkdir -p /usr/local/emhttp/plugins/&name;/scripts
+
+# set permissions on application directory
+chown -R root:users /usr/local/emhttp/plugins/&name;
+chmod -R go-rwx,u-x,g+u,ug+X /usr/local/emhttp/plugins/&name;
+  
+</INLINE>
+</FILE>
+
+<!-- POST-INSTALL SCRIPT -->
+<FILE Run="/bin/bash">
+<INLINE>
+# Update folder permissions
+chmod 755 /usr/local/emhttp/plugins/&name;
+chmod 755 /usr/local/emhttp/plugins/&name;/scripts
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+rm -rf /boot/config/plugins/&name;
+rm -rf /usr/local/emhttp/plugins/&name;
+rm -rf /var/run/&name;
+</INLINE>
+</FILE>
+
+<FILE Name="/usr/local/emhttp/plugins/&name;/&name;.png" Type="base64">
+<INLINE>
+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
+</INLINE>
+</FILE>
+
+<FILE Name="/usr/local/emhttp/plugins/&name;/README.md">
+<INLINE>
+**&name; plugin**
+
+This plugin automatically monitors network traffic and disables ASPM for PCIe devices when traffic is detected.
+</INLINE>
+</FILE>
+
+<FILE Name="/usr/local/emhttp/plugins/&name;/&name;.page">
+<INLINE>
+<![CDATA[
+Menu="Utilities"
+Title="AutoASPM"
+Icon="autoaspm.png"
+---
+<?PHP
+$autoaspm_cfg = parse_ini_file("/boot/config/plugins/autoaspm/autoaspm.cfg", false, INI_SCANNER_RAW);
+$autoaspm_running = file_exists("/var/run/autoaspm/autoaspm.pid") ? "yes" : "no";
+$autoaspm_state = shell_exec('cat /sys/module/pcie_aspm/parameters/policy');
+
+//Get local plugin file version
+$autoaspm_localplg = shell_exec('grep "<\!ENTITY version" /boot/config/plugins/autoaspm.plg | cut -d\" -f2');
+?>
+
+<div>
+  <div>
+    <h2>Status</h2>
+  </div>
+
+  <div>
+    <p>autoaspm version: <?=$autoaspm_localplg;?></p>
+    <p>autoaspm running: <?=$autoaspm_running;?></p>
+    <p>aspm state: <?=$autoaspm_state;?></p>
+  </div>
+
+  <div>
+    <h2>Configuration</h2>
+  </div>
+
+  <form name="autoaspm" method="POST" action="/plugins/autoaspm/autoaspm_ctl.php" target="progressFrame">
+    <table class="settings">
+      <tr>
+        <td>Enable autoaspm:</td>
+        <td>
+          <select name="ENABLED">
+            <?=mk_option($autoaspm_cfg['ENABLED'], "false", "No");?>
+            <?=mk_option($autoaspm_cfg['ENABLED'], "true", "Yes");?>
+          </select>
+        </td>
+      </tr>
+
+      <tr>
+        <td>Network interface:</td>
+        <td>
+          <input type="text" name="NETWORK_INTERFACE" value="<?=$autoaspm_cfg['NETWORK_INTERFACE'];?>">
+        </td>
+      </tr>
+
+      <tr>
+        <td>High traffic threshold (in bytes):</td>
+        <td>
+          <input type="number" name="HIGH_TRAFFIC_THRESHOLD" min="0" value="<?=$autoaspm_cfg['HIGH_TRAFFIC_THRESHOLD'];?>">
+        </td>
+      </tr>
+
+      <tr>
+        <td>Check interval (in seconds):</td>
+        <td>
+          <input type="number" name="CHECK_INTERVAL" min="0" value="<?=$autoaspm_cfg['CHECK_INTERVAL'];?>">
+        </td>
+      </tr>
+
+      <tr>
+        <td>Low traffic ASPM policy:</td>
+        <td>
+          <select name="LOW_TRAFFIC_ASPM_POLICY">
+            <?=mk_option($autoaspm_cfg['LOW_TRAFFIC_ASPM_POLICY'], "default", "BIOS Default");?>
+            <?=mk_option($autoaspm_cfg['LOW_TRAFFIC_ASPM_POLICY'], "performance", "Performance: ASPM Disabled");?>
+            <?=mk_option($autoaspm_cfg['LOW_TRAFFIC_ASPM_POLICY'], "powersave", "Power Save: ASPM L0s L1");?>
+            <?=mk_option($autoaspm_cfg['LOW_TRAFFIC_ASPM_POLICY'], "powersupersave", "Power Super Save: ASPM L0s L1 L1+");?>
+          </select>
+        </td>
+      </tr>
+
+      <tr>
+        <td>High traffic ASPM policy:</td>
+        <td>
+          <select name="HIGH_TRAFFIC_ASPM_POLICY">
+            <?=mk_option($autoaspm_cfg['HIGH_TRAFFIC_ASPM_POLICY'], "default", "BIOS Default");?>
+            <?=mk_option($autoaspm_cfg['HIGH_TRAFFIC_ASPM_POLICY'], "performance", "Performance: ASPM Disabled");?>
+            <?=mk_option($autoaspm_cfg['HIGH_TRAFFIC_ASPM_POLICY'], "powersave", "Power Save: ASPM L0s L1");?>
+            <?=mk_option($autoaspm_cfg['HIGH_TRAFFIC_ASPM_POLICY'], "powersupersave", "Power Super Save: ASPM L0s L1 L1+");?>
+          </select>
+        </td>
+      </tr>
+    </table>
+
+    <button type="submit">Apply</button>
+  </form>
+</div>
+]]>
+</INLINE>
+</FILE>
+
+<FILE Name="/usr/local/emhttp/plugins/&name;/autoaspm_ctl.php" Mode="0755">
+<INLINE>
+<![CDATA[
+<?PHP
+  function safe_file_write($file, $data) {
+    if ($fp = fopen($file, 'w')) {
+      $startTime = microtime(TRUE);
+      do {
+        $canWrite = flock($fp, LOCK_EX);
+        // If lock not obtained sleep for 0 - 100 milliseconds, to avoid collision and CPU load
+        if (!$canWrite) usleep(round(rand(0, 100)*1000));
+      } while ((!$canWrite) and ((microtime(TRUE) - $startTime) < 5));
+
+      //file was locked so now we can store information
+      if ($canWrite) {
+          fwrite($fp, $data);
+          flock($fp, LOCK_UN);
+      }
+
+      fclose($fp);
+    }
+  }
+
+  function write_config($array, $file) {
+    $output = array();
+
+    foreach ($array as $key => $val) {
+        $output[] = $key . '=' . $val;
+    }
+
+    safe_file_write($file, implode("\n", $output));
+  }
+
+  $config = array(
+    'ENABLED' => $_POST['ENABLED'],
+    'NETWORK_INTERFACE' => $_POST['NETWORK_INTERFACE'],
+    'HIGH_TRAFFIC_THRESHOLD' => $_POST['HIGH_TRAFFIC_THRESHOLD'],
+    'CHECK_INTERVAL' => $_POST['CHECK_INTERVAL'],
+    'HIGH_TRAFFIC_ASPM_POLICY' => $_POST['HIGH_TRAFFIC_ASPM_POLICY'],
+    'LOW_TRAFFIC_ASPM_POLICY' => $_POST['LOW_TRAFFIC_ASPM_POLICY'],
+  );
+
+  write_config($config, '/boot/config/plugins/autoaspm/autoaspm.cfg');
+
+  exec('/usr/local/emhttp/plugins/autoaspm/scripts/rc.autoaspm restart');
+
+  // Refresh page
+  echo("<html>");
+  echo("<head><script>var goback=parent.location;</script></head>");
+  echo("<body onLoad=\"parent.location=goback;\"></body>");
+  echo("</html>");
+?>
+]]>
+</INLINE>
+</FILE>
+
+<FILE Name="/usr/local/emhttp/plugins/&name;/scripts/&name;.sh" Mode="0770">
+<INLINE>
+<![CDATA[
+#!/bin/bash
+
+source /boot/config/plugins/autoaspm/autoaspm.cfg
+
+# Variables to track previous values and state
+previous_rx_bytes=$(ifconfig $NETWORK_INTERFACE | grep "RX packets" | awk '{print $5}' | cut -d':' -f2)
+previous_tx_bytes=$(ifconfig $NETWORK_INTERFACE | grep "TX packets" | awk '{print $5}' | cut -d':' -f2)
+high_traffic_detected=false
+
+echo "autoaspm: Starting..."
+
+echo "autoaspm: Setting initial ASPM policy..."
+echo "$LOW_TRAFFIC_ASPM_POLICY" > /sys/module/pcie_aspm/parameters/policy
+
+while true; do
+  # Get the current RX and TX bytes from ifconfig
+  current_rx_bytes=$(ifconfig $NETWORK_INTERFACE | grep "RX packets" | awk '{print $5}' | cut -d':' -f2)
+  current_tx_bytes=$(ifconfig $NETWORK_INTERFACE | grep "TX packets" | awk '{print $5}' | cut -d':' -f2)
+  
+  # Calculate the difference in bytes since the last check
+  rx_diff=$((current_rx_bytes - previous_rx_bytes))
+  tx_diff=$((current_tx_bytes - previous_tx_bytes))
+  
+  # Update previous values
+  previous_rx_bytes=$current_rx_bytes
+  previous_tx_bytes=$current_tx_bytes
+  
+  # Calculate the total traffic
+  total_diff=$((rx_diff + tx_diff))
+  
+  # Check if traffic exceeds the threshold
+  if [ $total_diff -ge $HIGH_TRAFFIC_THRESHOLD ]; then
+    if ! $high_traffic_detected; then
+      echo "$HIGH_TRAFFIC_ASPM_POLICY" > /sys/module/pcie_aspm/parameters/policy
+      echo "autoaspm: Traffic above configured threshold: $total_diff"
+      echo "autoaspm: Set ASPM to $HIGH_TRAFFIC_ASPM_POLICY"
+      high_traffic_detected=true
+    fi
+  else
+    if $high_traffic_detected; then
+      echo "$LOW_TRAFFIC_ASPM_POLICY" > /sys/module/pcie_aspm/parameters/policy
+      echo "autoaspm: Traffic below configured threshold: $total_diff"
+      echo "autoaspm: Set ASPM to $LOW_TRAFFIC_ASPM_POLICY"
+      high_traffic_detected=false
+    fi
+  fi
+  
+  # Wait for the next check interval
+  sleep $CHECK_INTERVAL
+done
+]]>
+</INLINE>
+</FILE>
+
+<FILE Name="/usr/local/emhttp/plugins/&name;/scripts/rc.&name;" Mode="0770">
+<INLINE>
+<![CDATA[
+#!/bin/bash
+
+source /boot/config/plugins/autoaspm/autoaspm.cfg
+
+start() {
+  if [ -f /var/run/autoaspm/autoaspm.pid ]; then
+    echo "autoaspm is already running."
+  else
+    if [ "$ENABLED" = "true" ]; then
+      /usr/local/emhttp/plugins/autoaspm/scripts/autoaspm.sh &> /dev/null &
+      echo $! > /var/run/autoaspm/autoaspm.pid
+      echo "autoaspm is now running."
+    else
+      echo "autoaspm: Service is disabled. Exiting..."
+    fi
+  fi
+}
+
+stop() {
+  if [ -f /var/run/autoaspm/autoaspm.pid ]; then
+    kill $(cat /var/run/autoaspm/autoaspm.pid)
+    rm /var/run/autoaspm/autoaspm.pid
+    echo "autoaspm stopped."
+  else
+    echo "autoaspm is not running."
+  fi
+}
+
+status() {
+  if [ -f /var/run/autoaspm/autoaspm.pid ]; then
+    echo "autoaspm is running."
+  else
+    echo "autoaspm is not running."
+  fi
+}
+
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart)
+    stop
+    start
+    ;;
+  status)
+    status
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
+]]>
+</INLINE>
+</FILE>
+
+<!-- event handler when disks are mounted -->
+<FILE Name="/usr/local/emhttp/plugins/&name;/event/disks_mounted" Mode="0770">
+<INLINE>
+#!/bin/bash
+/usr/local/emhttp/plugins/&name;/scripts/rc.&name; start
+</INLINE>
+</FILE>
+
+<!-- event handler when unmounting disks -->
+<FILE Name="/usr/local/emhttp/plugins/&name;/event/unmounting_disks" Mode="0770">
+<INLINE>
+#!/bin/bash
+/usr/local/emhttp/plugins/&name;/scripts/rc.&name; stop
+</INLINE>
+</FILE>
+
+</PLUGIN>
